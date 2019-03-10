@@ -1,9 +1,7 @@
 ---
 title: "Re-analysis of Gopalakrishnan et al. Science 2018"
 author: "yeguanhua"
-output: 
-  html_document: 
-    keep_md: true
+output: rmarkdown::github_document
 ---
 Note: This is a re-analysis workflow of Gopalakrishnan et al. Science 2018. Standardize data format and outputs with our in-house pipeline to facilitate cross-study comparison.
 
