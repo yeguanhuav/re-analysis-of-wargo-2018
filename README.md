@@ -1,34 +1,27 @@
-Re-analysis of Gopalakrishnan et al. Science 2018
+Re-analysis of Gopalakrishnan et al. Science 2018
 ================
 yeguanhua
 
-Note: This is a re-analysis workflow of Gopalakrishnan et al. Science 2018. Standardize data format and outputs with our in-house pipeline to facilitate cross-study comparison.
-
-``` r
-# Run date:
-Sys.time()
-```
-
-    ## [1] "2019-03-10 15:59:22 HKT"
+Note: This is a re-analysis workflow of Gopalakrishnan et al. Science
+2018. Standardize data format and outputs with our in-house pipeline to
+facilitate cross-study comparison.
 
 ``` r
 # Preparations:
 rm(list = ls())
 library(pacman)
 p_load(tidyverse, XML, readxl, ggplot2, ggpubr, vegan, VennDiagram, dada2)
-library(RColorBrewer)
+p_load(RColorBrewer)
 qual_col_pals = brewer.pal.info[brewer.pal.info$category == 'qual',]
 # 74 distinctive colors in R:
 distinctive_colors = unlist(mapply(brewer.pal, qual_col_pals$maxcolors, rownames(qual_col_pals))) %>% 
   .[-c(2)]
 ```
 
-Metadata
---------
+## Metadata
 
 ``` r
 # Map metadata and sample_id
-setwd("/home/yeguanhua/Wargo/EGAD00001003943/xmls/samples")
 filenames <- dir()
 sample_all <- tibble()
 for (i in filenames) {
@@ -43,14 +36,16 @@ for (i in filenames) {
 colnames(sample_all)[1] <- "description"
 sample_all
 # Write to disk
-write.csv(sample_all, file = "/home/yeguanhua/Wargo/metadata_wargo.csv", 
+write.csv(sample_all, file = "metadata/metadata_wargo.csv", 
           quote = F, row.names = F, na = "", append = F)
 ```
 
-Quality control
----------------
+## Quality control
 
-First, extract the sample\_id from matadata and save as ‘fecal\_16S\_sample\_id.txt’ in the same directory with the fastq file. Then, creat a shell script ‘demux.sh’ that has following command (by Jiangwei) :
+First, extract the sample\_id from matadata and save as
+‘fecal\_16S\_sample\_id.txt’ in the same directory with the fastq
+file. Then, creat a shell script ‘demux.sh’ that has following command
+(by Jiangwei) :
 
 ``` bash
 #!/usr/bin/bash
@@ -63,7 +58,10 @@ do
 done
 ```
 
-After running 'this shell script'demux.sh', the fastq file will be splited into 43 fastq files by sample\_id. Move all fastq files that generated to a new directory call ‘demux’. Creat a shell script ‘qc.sh’ that has following command (docker commands provided by Qinbingcai) :
+After running ‘this shell script’demux.sh’, the fastq file will be
+splited into 43 fastq files by sample\_id. Move all fastq files that
+generated to a new directory call ‘demux’. Creat a shell script ‘qc.sh’
+that has following command (docker commands provided by Qinbingcai) :
 
 ``` bash
 #!/usr/bin/bash
@@ -76,27 +74,34 @@ done
 docker run -u $UID:$UID --rm -v $PWD:/data/ quay.io/biocontainers/multiqc:1.6--py27h24bf2e0_0 sh -c "multiqc   -o /data/multiqc /data/fastqc"
 ```
 
-After running 'qc.sh', there will be two new folders called ‘fastqc’ and ‘multiqc’. Within ‘multiqc’, the html file contain qc result for all samples. Note: move 'fasqc' and 'multiqc' folder to elsewhere incase causing error in dada2 processing.
+After running ‘qc.sh’, there will be two new folders called ‘fastqc’ and
+‘multiqc’. Within ‘multiqc’, the html file contain qc result for all
+samples. Note: move ‘fasqc’ and ‘multiqc’ folder to elsewhere incase
+causing error in dada2 processing.
 
 MultiQC report:
 
-![](Re-analysis_Wargo_files/figure-markdown_github/wargo_fecal-16s_multiqc_report.png)
+![](qc/wargo_fecal-16s_multiqc_report.png)<!-- -->
 
-Denoised with DADA2 (single end)
---------------------------------
+## Denoised with DADA2 (single end)
 
-Note: remove 'filtered' folder before re-run.
+Note: remove ‘filtered’ folder before re-run.
 
-``` bash
-cd /home/yeguanhua/Wargo/PRJEB22894/ERR2162225/demux
-if [ -e filtered ]; then rm -rf filtered; fi
+``` r
+# cd /home/yeguanhua/Wargo/PRJEB22894/ERR2162225/demux
+# if [ -e filtered ]; then rm -rf filtered; fi
+path <- "rawdata/PRJEB22894/ERR2162225/demux"
+files <- list.files(path)
+if ("filtered" %in% files) {
+  system("rm -rf rawdata/PRJEB22894/ERR2162225/demux/filtered")
+}
 ```
 
 #### Filterring:
 
 ``` r
 # The directory should contain demultiplexed fastq.gz files
-path <- "/home/yeguanhua/Wargo/PRJEB22894/ERR2162225/demux"
+path <- "rawdata/PRJEB22894/ERR2162225/demux"
 # Filtered files go into the filtered file
 filtpath <- file.path(path, "filtered")
 fns <- list.files(path, pattern="fastq.gz")
@@ -109,7 +114,7 @@ out <- filterAndTrim(file.path(path,fns), file.path(filtpath,fns), truncLen=240,
 ``` r
 # File parsing
 filts <- list.files(filtpath, pattern="fastq.gz", full.names=TRUE)
-sample.names <- dir("/home/yeguanhua/Wargo/PRJEB22894/ERR2162225/demux/filtered/") %>% 
+sample.names <- dir("rawdata/PRJEB22894/ERR2162225/demux/filtered/") %>% 
   str_replace("\\.fastq\\.gz", "")
 names(filts) <- sample.names
 # Learn error rates
@@ -134,7 +139,7 @@ seqtab <- makeSequenceTable(dds)
 dim(seqtab)
 ```
 
-    ## [1]   40 9470
+    ## [1]   40 9267
 
 ``` r
 # Remove chimeras
@@ -143,23 +148,23 @@ seqtab_nochim <- removeBimeraDenovo(seqtab, method="consensus", multithread=TRUE
 dim(seqtab_nochim)
 ```
 
-    ## [1]   40 3211
+    ## [1]   40 3136
 
 ``` r
 # Inspect sequence remove rate
 sum(seqtab_nochim)/sum(seqtab)
 ```
 
-    ## [1] 0.8339514
+    ## [1] 0.8341207
 
 #### Assign taxonomy:
 
 ``` r
 tax_silva <- assignTaxonomy(seqtab_nochim, 
-                            "/home/DataShare/Database/SILVA/silva_nr_v132_train_set.fa.gz", 
+                            "dada2_database/silva_nr_v132_train_set.fa.gz", 
                             multithread=TRUE)
 tax_gg <- assignTaxonomy(seqtab_nochim, 
-                         "/home/yeguanhua/database/gg_13_8_train_set_97.fa.gz", 
+                         "dada2_database/gg_13_8_train_set_97.fa.gz", 
                          multithread=TRUE)
 ```
 
@@ -180,23 +185,21 @@ ggplot(track, aes(x = stages, y = reads, color = subject_id)) +
     geom_line(aes(group = subject_id))
 ```
 
-![](Re-analysis_Wargo_files/figure-markdown_github/track%20reads-1.png)
+![](README_files/figure-gfm/track%20reads-1.png)<!-- -->
 
-Rarefaction plot
-----------------
+## Rarefaction plot
 
 ``` r
 rarecurve(seqtab_nochim, step = 50, col = distinctive_colors)
 ```
 
-![](Re-analysis_Wargo_files/figure-markdown_github/Rarefaction%20plot-1.png)
+![](README_files/figure-gfm/Rarefaction%20plot-1.png)<!-- -->
 
-Taxonomy comparison with original results
------------------------------------------
+## Taxonomy comparison with original results
 
 ``` r
 # Load original taxonomy classification
-tax_origin <- read_excel(path = "/home/yeguanhua/Wargo/original_taxonomic_classification_top50.xlsx", 
+tax_origin <- read_excel(path = "original_files/original_taxonomic_classification_top50.xlsx", 
                          sheet = 2)
 # Extract top 50 genus of Silva database
 seqtab_t <- seqtab_nochim %>% t() %>% rowSums() %>% as.data.frame()
@@ -220,10 +223,9 @@ silva_Genus_venn <- venn.diagram(list("Original" = tax_origin$silva_Genus_origin
 
 Comparison of Genus overlap (Silva database):
 
-![](Re-analysis_Wargo_files/figure-markdown_github/silva_Genus_venn-1.png)
+![](README_files/figure-gfm/silva_Genus_venn-1.png)<!-- -->
 
-Creat function for converting dada2 results to OTU table
---------------------------------------------------------
+## Creat function for converting dada2 results to OTU table
 
 ``` r
 # Convert DADA2 results to OTU table
@@ -275,12 +277,11 @@ construct_otu_table <- function(seq, tax, level = "all", lefse = FALSE) {
 }
 ```
 
-Extract metadata
-----------------
+## Extract metadata
 
 ``` r
 # Read metadata
-metadata_wargo <- read_excel(path = "/home/yeguanhua/Wargo/wargo_metadata.xlsx", sheet = 1)
+metadata_wargo <- read_excel(path = "metadata/wargo_metadata.xlsx", sheet = 1)
 # Remove Wargo.116774 (has the least reads counts)
 # Remove Wargo.121585 (metadata is mixed with Wargo.133270)
 metadata_wargo <- metadata_wargo[-c(3, 10),]
@@ -293,8 +294,7 @@ metadata_wargo$phenotype <- factor(metadata_wargo$phenotype, levels = c("R", "NR
 phenotype_wargo <- select(metadata_wargo, phenotype) %>% as.data.frame()
 ```
 
-OTU distribution per sample in Genus level
-------------------------------------------
+## OTU distribution per sample in Genus level
 
 ``` r
 # Construct otu table
@@ -333,10 +333,9 @@ ggboxplot(otu_distribution_genus,
   theme(axis.text.x = element_text(angle = 90, size = 8, color = median_value$phenotype))
 ```
 
-![](Re-analysis_Wargo_files/figure-markdown_github/OTU%20distribution-1.png)
+![](README_files/figure-gfm/OTU%20distribution-1.png)<!-- -->
 
-Construct phylogenetic tree
----------------------------
+## Construct phylogenetic tree
 
 ``` r
 # Construct phylogenetic tree step from Bioconductor workflow v2
@@ -344,11 +343,11 @@ seqs <- getSequences(seqtab_nochim)
 names(seqs) <- seqs
 # Performing a multiple-alignment using the DECIPHER R package
 #BiocManager::install(pkgs=c("DECIPHER"))
-library(DECIPHER)
+p_load(DECIPHER)
 alignment <- AlignSeqs(DNAStringSet(seqs), anchor=NA)
 # The phangorn R package is then used to construct a phylogenetic tree
 #BiocManager::install(pkgs=c("phangorn"))
-library(phangorn)
+p_load(phangorn)
 phang.align <- phyDat(as(alignment, "matrix"), type="DNA")
 dm <- dist.ml(phang.align)
 treeNJ <- NJ(dm)  #Note: tip order != sequence order 
@@ -366,13 +365,12 @@ end_time_optim.pml <- Sys.time()
 end_time_optim.pml - start_time_optim.pml
 ```
 
-    ## Time difference of 3.154251 hours
+    ## Time difference of 3.613857 hours
 
-Combine data into a phyloseq object
------------------------------------
+## Combine data into a phyloseq object
 
 ``` r
-library(phyloseq)
+p_load(phyloseq)
 ps_seqtab <- seqtab_nochim[metadata_wargo$subject_id,]
 # Import data into phyloseq
 ps <- phyloseq(tax_table(tax_silva), 
@@ -381,8 +379,7 @@ ps <- phyloseq(tax_table(tax_silva),
                phy_tree(fitGTR$tree))
 ```
 
-Stacked bar plot of phylogenetic composition
---------------------------------------------
+## Stacked bar plot of phylogenetic composition
 
 ``` r
 # Construct percentage Order level otu
@@ -414,18 +411,20 @@ ggplot(stacked_bar_plot, aes(x = subject_id, y = abundance)) +
   geom_bar(mapping = aes(fill = Order), position = "fill", stat = "identity")
 ```
 
-![](Re-analysis_Wargo_files/figure-markdown_github/stacked%20bar%20plot%20using%20phyloseq::plot_bar-1.png)
+![](README_files/figure-gfm/stacked%20bar%20plot%20using%20phyloseq::plot_bar-1.png)<!-- -->
 
-Original stacked bar plot from Gopalakrishnan et al. Science 2018, oral (n = 109, top) and fecal (n = 53, bottom), Order level:
+Original stacked bar plot from Gopalakrishnan et al. Science 2018, oral
+(n = 109, top) and fecal (n = 53, bottom), Order level:
 
-![](Re-analysis_Wargo_files/figure-markdown_github/original_stacked_bar_plot_Order.png)
+![](original_files/original_stacked_bar_plot_Order.png)<!-- -->
 
-Alpha diversity
----------------
+## Alpha diversity
 
 ### Inverse Simpson
 
-Phyloseq::plot\_richness can draw alpha diversity plots, but the plots are indistinguishable, so use ggpbur package to draw alpha diversity plots (by JiangWei) :
+Phyloseq::plot\_richness can draw alpha diversity plots, but the plots
+are indistinguishable, so use ggpbur package to draw alpha diversity
+plots (by JiangWei) :
 
 ``` r
 # Change phenotype to numeric to calculate wilcox-test
@@ -453,11 +452,12 @@ ggboxplot(InvSimpson_alpha$data,
            size = 3)
 ```
 
-![](Re-analysis_Wargo_files/figure-markdown_github/inverse%20simpson%20diversity-1.png)
+![](README_files/figure-gfm/inverse%20simpson%20diversity-1.png)<!-- -->
 
-Original alpha diversity from Gopalakrishnan et al. Science 2018:
+Original alpha diversity from Gopalakrishnan et al. Science
+2018:
 
-![](Re-analysis_Wargo_files/figure-markdown_github/original_alpha.png)
+![](original_files/original_alpha.png)<!-- -->
 
 ### ANOSIM
 
@@ -468,16 +468,15 @@ ANOSIM <- anosim(vegdist(otu_table(ps)), ANOSIM_otu$phenotype)
 plot(ANOSIM)
 ```
 
-![](Re-analysis_Wargo_files/figure-markdown_github/ANOSIM-1.png)
+![](README_files/figure-gfm/ANOSIM-1.png)<!-- -->
 
-Beta diversity
---------------
+## Beta diversity
 
 ### Weighted-Unifrac
 
 ``` r
 # Weighted-Unifrac
-# Note: use phyloseq::distance instead if distance
+# Note: use phyloseq::distance instead of distance
 wu_pcoa <- cmdscale(phyloseq::distance(physeq = ps, method = "wunifrac"), k = 2, eig = T)
 wu_mds1 <- as.data.frame(wu_pcoa$points)
 colnames(wu_mds1) <- c("pc1", "pc2")
@@ -489,17 +488,17 @@ ggplot(data = wu_data_ord, aes(x = pc1, y = pc2)) +
   scale_color_manual(values=c("#00AFBB", "#FC4E07"))
 ```
 
-![](Re-analysis_Wargo_files/figure-markdown_github/weighted%20unifrac-1.png)
+![](README_files/figure-gfm/weighted%20unifrac-1.png)<!-- -->
 
-Original beta diversity from Gopalakrishnan et al. Science 2018:
+Original beta diversity from Gopalakrishnan et al. Science 2018:
 
-![](Re-analysis_Wargo_files/figure-markdown_github/original_beta.png)
+![](original_files/original_beta.png)<!-- -->
 
 ### NMDS (Non-metric Multidimensional scaling)
 
 ``` r
-library(MASS)
-library(plotly)
+p_load(MASS)
+p_load(plotly)
 ```
 
 #### jaccard distance:
@@ -515,7 +514,7 @@ otu_nmds_j <- metaMDS(otu_table(ps), distance = "jaccard")
 stressplot(otu_nmds_j, otu_dis_j)
 ```
 
-![](Re-analysis_Wargo_files/figure-markdown_github/NMDS%20jaccard%20plot-1.png)
+![](README_files/figure-gfm/NMDS%20jaccard%20plot-1.png)<!-- -->
 
 ``` r
 # NMDS points plot with phenotype
@@ -528,7 +527,7 @@ ggplot(otu_nmds_points_j, aes(MDS1, MDS2, col = phenotype)) +
   scale_color_manual(values=c("#00AFBB", "#FC4E07"))
 ```
 
-![](Re-analysis_Wargo_files/figure-markdown_github/NMDS%20jaccard%20plot-2.png)
+![](README_files/figure-gfm/NMDS%20jaccard%20plot-2.png)<!-- -->
 
 #### mountford distance:
 
@@ -543,7 +542,7 @@ otu_nmds_m <- metaMDS(otu_table(ps), distance = "mountford")
 stressplot(otu_nmds_m, otu_dis_m)
 ```
 
-![](Re-analysis_Wargo_files/figure-markdown_github/NMDS%20mountford%20plot-1.png)
+![](README_files/figure-gfm/NMDS%20mountford%20plot-1.png)<!-- -->
 
 ``` r
 # NMDS points plot with phenotype
@@ -556,7 +555,7 @@ ggplot(otu_nmds_points_m, aes(MDS1, MDS2, col = phenotype)) +
   scale_color_manual(values=c("#00AFBB", "#FC4E07"))
 ```
 
-![](Re-analysis_Wargo_files/figure-markdown_github/NMDS%20mountford%20plot-2.png)
+![](README_files/figure-gfm/NMDS%20mountford%20plot-2.png)<!-- -->
 
 ### DPCoA
 
@@ -573,7 +572,7 @@ plot_ordination(pslog,
   scale_color_manual(values=c("#00AFBB", "#FC4E07"))
 ```
 
-![](Re-analysis_Wargo_files/figure-markdown_github/DPCoA%20samples-1.png)
+![](README_files/figure-gfm/DPCoA%20samples-1.png)<!-- -->
 
 ``` r
 # DPCoA for taxonomy: Order
@@ -585,7 +584,7 @@ plot_ordination(pslog,
   scale_color_manual(values = distinctive_colors)
 ```
 
-![](Re-analysis_Wargo_files/figure-markdown_github/DPCoA%20taxonomy-1.png)
+![](README_files/figure-gfm/DPCoA%20taxonomy-1.png)<!-- -->
 
 ### K-means
 
@@ -612,10 +611,9 @@ ggplot(km_plot, aes(Bacteroidales, Clostridiales)) +
   scale_color_manual(values=c("#00AFBB", "#FC4E07"))
 ```
 
-![](Re-analysis_Wargo_files/figure-markdown_github/k-means-1.png)
+![](README_files/figure-gfm/k-means-1.png)<!-- -->
 
-LEfSe result
-------------
+## LEfSe result
 
 ``` r
 # Convert OTU table to LEfSe input
@@ -634,27 +632,22 @@ lefse_phenotype[1,1] <- "subject_id"
 colnames(lefse_phenotype) <- colnames(lefse_input)
 lefse_phenotype <- lefse_phenotype[nrow(lefse_phenotype):1,]
 lefse_input <- rbind(lefse_phenotype, lefse_input)
-write_tsv(lefse_input, path = "/home/yeguanhua/Wargo/LEfSe/lefse_inpiut.tsv", col_names = FALSE)
+write_tsv(lefse_input, path = "LEfSe/lefse_inpiut.tsv", col_names = FALSE)
 ```
 
-LEfSe results was generated by Galaxy web application (<http://huttenhower.sph.harvard.edu/galaxy/>):
+LEfSe results was generated by Galaxy web application
+(<http://huttenhower.sph.harvard.edu/galaxy/>):
 
-![](Re-analysis_Wargo_files/figure-markdown_github/LEfSe_Results.png)
+![](LEfSe/Cladogram.png)<!-- -->![](LEfSe/Results.png)<!-- -->
 
-![](Re-analysis_Wargo_files/figure-markdown_github/LEfSe_Results_Cladogram.png)
+Original LEfSe results from Gopalakrishnan et al. Science 2018:
 
-Original LEfSe results from Gopalakrishnan et al. Science 2018:
+![](LEfSe/2C.png)<!-- -->![](LEfSe/2D.png)<!-- -->
 
-![](Re-analysis_Wargo_files/figure-markdown_github/2D.png)
-
-![](Re-analysis_Wargo_files/figure-markdown_github/2C.png)
-
-
-Log2 Fold Change
-----------------
+## Log2 Fold Change
 
 ``` r
-library(DESeq2)
+p_load(DESeq2)
 # Construt table for DESeq2
 deseq2_dds <- DESeqDataSetFromMatrix(countData = otu_silva_genus, 
                                      colData = phenotype_wargo, 
@@ -676,18 +669,16 @@ ggplot(data = deseq2_plot, aes(x = log2FoldChange, y = -log10(pvalue))) +
   theme(axis.title.y=element_text(size=20), axis.text.y=element_text(size=15))
 ```
 
-![](Re-analysis_Wargo_files/figure-markdown_github/log2foldchange-1.png)
+![](README_files/figure-gfm/log2foldchange-1.png)<!-- -->
 
-Compare taxonomy overlap between Log2FC and LEfSe:
---------------------------------------------------
+## Compare taxonomy overlap between Log2FC and LEfSe:
 
 ``` r
 # Taxonomy in Log2FC which pvalue < 0.5, |log2FC| > 1
 deseq2_res2 <- deseq2_plot[which(deseq2_plot$pvalue < 0.5 & abs(deseq2_plot$log2FoldChange) > 1),] %>% 
   rownames_to_column()
 # LEfSe result was generated by LEfSe docker (by Jiangwei)
-lefse_res <- readxl::read_excel(path = "/home/yeguanhua/Wargo/LEfSe/lefse_res.xlsx", 
-                                col_names = FALSE)
+lefse_res <- readxl::read_excel(path = "LEfSe/lefse_res.xlsx", col_names = FALSE)
 lefse_res <- lefse_res[which(!is.na(lefse_res[,3])),]
 lefse_res <- str_replace(lefse_res[[1]], "^.+\\.", "")
 foldchange_venn <- venn.diagram(list("Log2FC" = deseq2_res2$rowname, "LEfSe" = lefse_res), 
@@ -699,10 +690,9 @@ foldchange_venn <- venn.diagram(list("Log2FC" = deseq2_res2$rowname, "LEfSe" = l
 grid::grid.draw(foldchange_venn)
 ```
 
-![](Re-analysis_Wargo_files/figure-markdown_github/Compare%20taxonomy%20overlap%20between%20Log2FC%20and%20LEfSe-1.png)
+![](README_files/figure-gfm/Compare%20taxonomy%20overlap%20between%20Log2FC%20and%20LEfSe-1.png)<!-- -->
 
-PICRUSt
--------
+## PICRUSt
 
 ``` r
 # Export DADA2 sequences to fasta file
@@ -715,7 +705,7 @@ seqs2fasta = function(seq_tab, out_path) {
 }
 # must have a exist output path
 seqs2fasta(seq_tab = seqtab_nochim, 
-           out_path = "/home/yeguanhua/Wargo/PRJEB22894/ERR2162225/demux/filtered/seqs.fasta")
+           out_path = "rawdata/PRJEB22894/ERR2162225/demux/filtered/seqs.fasta")
 ```
 
 ``` bash
@@ -726,7 +716,7 @@ seqs2fasta(seq_tab = seqtab_nochim,
 
 ``` r
 # Construct OTU table for PICRUSt
-otu_id <- read_tsv(file = "/home/yeguanhua/Wargo/PICRUSt/otu_blast.tsv", col_names = F) %>% 
+otu_id <- read_tsv(file = "PICRUSt/otu_blast.tsv", col_names = F) %>% 
   select(X1, X2)
 PICRUSt_otu <-  as.data.frame(t(seqtab_nochim))
 row.names(PICRUSt_otu) <-  paste0("OTU", 1:nrow(PICRUSt_otu))
@@ -739,65 +729,20 @@ PICRUSt_otu <- rowsum(t(PICRUSt_otu), group = colnames(PICRUSt_otu)) %>% as.data
 # Run PICRUSt in R
 #install.packages("themetagenomics")
 #BiocManager::install(pkgs=c("themetagenomics"))
-library(themetagenomics)
-ref <- "/home/yeguanhua/PICRUSt/themetagenomics_data"
+p_load(themetagenomics)
+ref <- "PICRUSt/themetagenomics_data"
 PICRUSt_result <- picrust(PICRUSt_otu, rows_are_taxa=TRUE, 
                           reference='gg_ko', reference_path=ref, 
                           cn_normalize=TRUE, sample_normalize=FALSE, drop=TRUE)
 PICRUSt_result$fxn_table[1:5,1:5]
-```
-
-    ##              K01361 K01362 K05841 K05844 K05845
-    ## Wargo.109865      0   3381      0      4      4
-    ## Wargo.115690     32   3314      0      2     46
-    ## Wargo.117349      0  20808      1    163    443
-    ## Wargo.118369     12  18601      0    239    417
-    ## Wargo.118370     11  14025     10    201    501
-
-``` r
 names(PICRUSt_result$fxn_meta)
-```
-
-    ## [1] "KEGG_Description" "KEGG_Pathways"
-
-``` r
 head(PICRUSt_result$fxn_meta$KEGG_Description)
 ```
 
-    ## $K01361
-    ## $K01361[[1]]
-    ## [1] "lactocepin [ec:3.4.21.96]"
-    ## 
-    ## 
-    ## $K01362
-    ## $K01362[[1]]
-    ## [1] "none"
-    ## 
-    ## 
-    ## $K05841
-    ## $K05841[[1]]
-    ## [1] "sterol 3beta-glucosyltransferase [ec:2.4.1.173]"
-    ## 
-    ## 
-    ## $K05844
-    ## $K05844[[1]]
-    ## [1] "ribosomal protein s6 modification protein"
-    ## 
-    ## 
-    ## $K05845
-    ## $K05845[[1]]
-    ## [1] "osmoprotectant transport system substrate-binding protein"
-    ## 
-    ## 
-    ## $K05846
-    ## $K05846[[1]]
-    ## [1] "osmoprotectant transport system permease protein"
-
-Save results
-------------
+## Save results
 
 ``` r
-# Save results
-save(list = ls(), 
-     file = paste("/home/yeguanhua/Wargo/Re-analysis_Wargo_", Sys.Date(), ".rdata", sep = ""))
+## Save results
+#save(list = ls(), 
+#     file = paste("Re-analysis_Wargo_", Sys.Date(), ".rdata", sep = ""))
 ```
